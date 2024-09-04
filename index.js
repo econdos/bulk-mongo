@@ -69,17 +69,18 @@ module.exports = function create(db) {
         //  We must execute when bulkSize has been reached.
         if (++counter % bulkSize === 0) {
           debug('writing ' + bulkSize + ' bytes');
-          bulkOp.execute(function (e, d) {
-            if (!e) {
-              output.emit('inserts', d);
-              try {
-                init();
-              } catch (err) {
-                e = err;
-              }
-            }
-            cb(e, d);
-          });
+          bulkOp.execute()
+              .then(function (d) {
+                output.emit('inserts', d);
+                try {
+                  init();
+                } catch (err) {
+                  cb(err, d);
+                }
+              })
+              .catch(function (e) {
+                cb(e, null);
+              });
         } else {
           cb(null);
         }
@@ -98,17 +99,19 @@ module.exports = function create(db) {
       debug('is finishing');
       if (counter && counter % bulkSize) {
         debug('writing ' + counter % bulkSize + ' bytes');
-        bulkOp.execute(function (e, d) {
-          if (e) {    // Could not create this error so far...
-            if (!output.listeners('error')) {
-              throw e;
-            }
-            post('error', e);
-          } else {
-            post('inserts', d);
-          }
-          post('done');
-        });
+        bulkOp.execute()
+            .then(function (d) {
+              post('inserts', d);
+            })
+            .catch(function (e) {
+              if (!output.listeners('error')) {
+                throw e;
+              }
+              post('error', e);
+            })
+            .finally(function () {
+              post('done');
+            });
       } else {
         post('done');
       }
